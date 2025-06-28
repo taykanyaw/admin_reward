@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - ระบบรายงานความดี</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    .preloader {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      transition: opacity 0.5s ease;
+    }
+    .preloader img {
+      width: 100px;
+      height: 100px;
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      border-radius: 1.5rem;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .glass-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+    }
+    .chart-container {
+      max-width: 280px;
+      margin: 0 auto;
+      padding: 1rem;
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.1);
+      transition: transform 0.3s ease;
+    }
+    .chart-container:hover {
+      transform: scale(1.05);
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background: white;
+      padding: 2rem;
+      border-radius: 1.5rem;
+      width: 95%;
+      max-width: 600px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      transform: translateY(0);
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+      from { transform: translateY(-20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @media (max-width: 640px) {
+      .chart-container {
+        max-width: 220px;
+      }
+      .glass-card {
+        padding: 1.25rem;
+      }
+      .modal-content {
+        padding: 1.5rem;
+      }
+      table {
+        font-size: 0.75rem;
+      }
+      th, td {
+        padding: 0.25rem;
+      }
+      .preloader img {
+        width: 150px;
+        height: 150px;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 via-indigo-100 to-purple-100 font-sans min-h-screen">
+  <!-- Preloader -->
+  <div id="preloader" class="preloader">
+    <img src="https://media.tenor.com/pEDQL3XJxdsAAAAi/cat-cute.gif" alt="Loading">
+  </div>
+
+  <!-- Main Content -->
+  <div id="main-content" class="container mx-auto p-4 sm:p-8 hidden">
+    <header class="text-center mb-10">
+      <h1 class="text-4xl sm:text-5xl font-extrabold text-indigo-900 tracking-tight">Admin Dashboard</h1>
+      <p class="text-lg sm:text-xl text-gray-600 mt-3">จัดการคะแนนนักเรียนอย่างง่ายดายและทันสมัย</p>
+    </header>
+
+    <!-- Charts Card -->
+    <div class="glass-card p-6 sm:p-8 mb-8">
+      <h2 class="text-2xl sm:text-3xl font-bold text-indigo-900 mb-6 text-center">ภาพรวมคะแนนทั้งหมด</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div class="chart-container">
+          <canvas id="goodDeedsChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="pointsChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="extraPointsChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Students Table -->
+    <div class="glass-card p-6 sm:p-8">
+      <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+        <h2 class="text-2xl sm:text-3xl font-bold text-indigo-900">รายชื่อนักเรียน</h2>
+        <div class="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+          <select id="classFilter" class="border-2 border-gray-200 bg-white text-gray-700 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-48 shadow-sm">
+            <option value="">ทุกชั้นเรียน</option>
+          </select>
+          <select id="nameSearch" class="border-2 border-gray-200 bg-white text-gray-700 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-64 shadow-sm">
+            <option value="">เลือกชื่อนักเรียน...</option>
+          </select>
+          <button onclick="fetchData()" class="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-colors shadow-sm flex items-center justify-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            รีเฟรช
+          </button>
+        </div>
+      </div>
+      <div class="overflow-x-auto rounded-xl shadow-sm">
+        <table class="w-full text-left border-collapse bg-white rounded-xl text-sm">
+          <thead>
+            <tr class="bg-indigo-100 text-indigo-900 text-sm">
+              <th class="p-2 font-semibold">เลข</th>
+              <th class="p-2 font-semibold">ชื่อ</th>
+              <th class="p-3 font-semibold">ชั้น</th>
+              <th class="p-2 font-semibold">ครั้ง</th>
+              <th class="p-2 font-semibold">สะสม</th>
+              <th class="p-2 font-semibold">พิเศษ</th>
+              <th class="p-2 font-semibold">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="students-table" class="text-gray-700"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <h2 class="text-2xl font-bold text-indigo-900 mb-6">แก้ไขคะแนน</h2>
+      <form id="editForm">
+        <input type="hidden" id="editRowIndex">
+        <div class="mb-5">
+          <label class="block text-gray-700 font-medium mb-2">ชื่อ-นามสกุล</label>
+          <input type="text" id="editName" class="w-full border-2 border-gray-200 p-3 rounded-xl bg-gray-50 text-gray-700" readonly>
+        </div>
+        <div class="mb-5">
+          <label class="block text-gray-700 font-medium mb-2">ชั้นเรียน</label>
+          <input type="text" id="editClass" class="w-full border-2 border-gray-200 p-3 rounded-xl bg-gray-50 text-gray-700" readonly>
+        </div>
+        <div class="mb-5">
+          <label class="block text-gray-700 font-medium mb-2">จำนวนครั้งทำความดี</label>
+          <input type="number" id="editGoodDeeds" class="w-full border-2 border-gray-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+        </div>
+        <div class="mb-5">
+          <label class="block text-gray-700 font-medium mb-2">แต้มสะสม</label>
+          <input type="number" id="editPoints" class="w-full border-2 border-gray-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+        </div>
+        <div class="mb-5">
+          <label class="block text-gray-700 font-medium mb-2">แต้มพิเศษ</label>
+          <input type="number" id="editExtraPoints" class="w-full border-2 border-gray-200 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+        </div>
+        <div class="flex justify-end gap-3">
+          <button type="button" id="closeModal" class="bg-gray-500 text-white px-5 py-3 rounded-xl hover:bg-gray-600 transition-colors">ยกเลิก</button>
+          <button type="submit" class="bg-indigo-600 text-white px-5 py-3 rounded-xl hover:bg-indigo-700 transition-colors">บันทึก</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer class="bg-gradient-to-r from-indigo-800 to-purple-900 text-center py-6 mt-10">
+    <p class="text-white text-lg">©️ <span id="currentYear"></span> พัฒนาโดย <span class="text-pink-300 font-bold">❤️ครูอั๋น ใจดี❤️</span></p>
+  </footer>
+
+  <script>
+    let goodDeedsChartInstance = null;
+    let pointsChartInstance = null;
+    let extraPointsChartInstance = null;
+    const liffId = '';
+    const sheetUrl = 'https://script.google.com/macros/s/AKfycbzkYQoRRD840yKHcQUsiv23Cn2tKDhvat40EmyKAxihB8yfBzHwTQx979Uscxuh4mPwwA/exec';
+    let studentsData = [];
+    let currentFilteredData = [];
+
+    // Update current year in footer
+    document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+    // Initialize LINE LIFF
+    function initializeLiff() {
+      liff
+        .init({ liffId })
+        .then(() => {
+          console.log('LIFF initialized successfully');
+          if (!liff.isLoggedIn()) {
+            liff.login();
+          } else {
+            fetchData();
+          }
+        })
+        .catch(err => {
+          console.error('LIFF initialization failed:', err);
+          Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อ LINE LIFF ได้', 'error');
+          document.getElementById('preloader').classList.add('hidden');
+        });
+    }
+
+    // Fetch data from Google Sheets
+    async function fetchData() {
+      document.getElementById('preloader').classList.remove('hidden');
+      try {
+        const response = await fetch(sheetUrl);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        
+        studentsData = data.filter(item => item.ชื่อ && item.สกุล);
+        // Sort students by class and student number
+        studentsData.sort((a, b) => {
+          const classA = a.ชั้นเรียน || '';
+          const classB = b.ชั้นเรียน || '';
+          const numA = parseInt(a.เลขที่) || 9999;
+          const numB = parseInt(b.เลขที่) || 9999;
+          return classA.localeCompare(classB) || numA - numB;
+        });
+        currentFilteredData = studentsData;
+        populateClassFilter(studentsData);
+        populateNameSearch(studentsData);
+        renderTable(studentsData);
+        renderCharts(studentsData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        Swal.fire('ข้อผิดพลาด', `ไม่สามารถดึงข้อมูลได้: ${error.message}`, 'error');
+      } finally {
+        document.getElementById('preloader').classList.add('hidden');
+        document.getElementById('main-content').classList.remove('hidden');
+      }
+    }
+
+    // Populate Class Filter Dropdown
+    function populateClassFilter(data) {
+      const classFilter = document.getElementById('classFilter');
+      classFilter.innerHTML = '<option value="">ทุกชั้นเรียน</option>';
+      const classes = [...new Set(data.map(student => student.ชั้นเรียน).filter(cls => cls))].sort();
+      classes.forEach(cls => {
+        const option = document.createElement('option');
+        option.value = cls;
+        option.textContent = cls;
+        classFilter.appendChild(option);
+      });
+    }
+
+    // Populate Name Search Dropdown
+    function populateNameSearch(data, selectedClass = '') {
+      const nameSearch = document.getElementById('nameSearch');
+      nameSearch.innerHTML = '<option value="">เลือกชื่อนักเรียน...</option>';
+      const filteredData = selectedClass ? data.filter(student => student.ชั้นเรียน === selectedClass) : data;
+      filteredData.sort((a, b) => {
+        const classA = a.ชั้นเรียน || '';
+        const classB = b.ชั้นเรียน || '';
+        const numA = parseInt(a.เลขที่) || 9999;
+        const numB = parseInt(b.เลขที่) || 9999;
+        return classA.localeCompare(classB) || numA - numB;
+      });
+      filteredData.forEach(student => {
+        const option = document.createElement('option');
+        option.value = `${student.ชื่อ} ${student.สกุล}`;
+        option.textContent = `${student.ชื่อ} ${student.สกุล}`;
+        nameSearch.appendChild(option);
+      });
+    }
+
+    // Render Table
+    function renderTable(data) {
+      const tableBody = document.getElementById('students-table');
+      tableBody.innerHTML = '';
+      // Sort data by class and student number
+      const sortedData = [...data].sort((a, b) => {
+        const classA = a.ชั้นเรียน || '';
+        const classB = b.ชั้นเรียน || '';
+        const numA = parseInt(a.เลขที่) || 9999;
+        const numB = parseInt(b.เลขที่) || 9999;
+        return classA.localeCompare(classB) || numA - numB;
+      });
+      currentFilteredData = sortedData;
+      sortedData.forEach((student, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="p-2 border-b">${student.เลขที่ || '-'}</td>
+          <td class="p-2 border-b">${student.ชื่อ} ${student.สกุล}</td>
+          <td class="p-3 border-b">${student.ชั้นเรียน || '-'}</td>
+          <td class="p-2 border-b">${student.จำนวนครั้งทำความดี || 0}</td>
+          <td class="p-2 border-b">${student.แต้มสะสม || 0}</td>
+          <td class="p-2 border-b">${student.แต้มพิเศษ || 0}</td>
+          <td class="p-2 border-b">
+            <button onclick="openEditModal(${index})" class="bg-indigo-600 text-white px-2 py-1 rounded-lg hover:bg-indigo-700 transition-colors">🔥</button>
+          </td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+
+    // Render Charts
+    function renderCharts(data) {
+      const totalGoodDeeds = data.reduce((sum, s) => sum + (parseInt(s.จำนวนครั้งทำความดี) || 0), 0);
+      const totalPoints = data.reduce((sum, s) => sum + (parseInt(s.แต้มสะสม) || 0), 0);
+      const totalExtraPoints = data.reduce((sum, s) => sum + (parseInt(s.แต้มพิเศษ) || 0), 0);
+
+      const maxValue = Math.max(totalGoodDeeds, totalPoints, totalExtraPoints, 100);
+
+      // Good Deeds Chart
+      const goodDeedsCtx = document.getElementById('goodDeedsChart').getContext('2d');
+      if (goodDeedsChartInstance) goodDeedsChartInstance.destroy();
+      goodDeedsChartInstance = new Chart(goodDeedsCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['จำนวนครั้งทำความดี'],
+          datasets: [{
+            data: [totalGoodDeeds, maxValue - totalGoodDeeds],
+            backgroundColor: ['#3b82f6', '#e5e7eb'],
+            borderColor: ['#2563eb', '#d1d5db'],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          animation: { duration: 2000, easing: 'easeInOutQuad' },
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '60%',
+          rotation: -90,
+          plugins: {
+            legend: { position: 'top', labels: { font: { size: 12, weight: 'bold' }, color: '#1f2937' } },
+            tooltip: { enabled: true, backgroundColor: 'rgba(0, 0, 0, 0.8)' }
+          },
+          aspectRatio: 1
+        }
+      });
+
+      // Points Chart
+      const pointsCtx = document.getElementById('pointsChart').getContext('2d');
+      if (pointsChartInstance) pointsChartInstance.destroy();
+      pointsChartInstance = new Chart(pointsCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['แต้มสะสม'],
+          datasets: [{
+            data: [totalPoints, maxValue - totalPoints],
+            backgroundColor: ['#10b981', '#e5e7eb'],
+            borderColor: ['#059669', '#d1d5db'],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          animation: { duration: 2000, easing: 'easeInOutQuad' },
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '60%',
+          rotation: -90,
+          plugins: {
+            legend: { position: 'top', labels: { font: { size: 12, weight: 'bold' }, color: '#1f2937' } },
+            tooltip: { enabled: true, backgroundColor: 'rgba(0, 0, 0, 0.8)' }
+          },
+          aspectRatio: 1
+        }
+      });
+
+      // Extra Points Chart
+      const extraPointsCtx = document.getElementById('extraPointsChart').getContext('2d');
+      if (extraPointsChartInstance) extraPointsChartInstance.destroy();
+      extraPointsChartInstance = new Chart(extraPointsCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['แต้มพิเศษ'],
+          datasets: [{
+            data: [totalExtraPoints, maxValue - totalExtraPoints],
+            backgroundColor: ['#ef4444', '#e5e7eb'],
+            borderColor: ['#dc2626', '#d1d5db'],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          animation: { duration: 2000, easing: 'easeInOutQuad' },
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '60%',
+          rotation: -90,
+          plugins: {
+            legend: { position: 'top', labels: { font: { size: 12, weight: 'bold' }, color: '#1f2937' } },
+            tooltip: { enabled: true, backgroundColor: 'rgba(0, 0, 0, 0.8)' }
+          },
+          aspectRatio: 1
+        }
+      });
+    }
+
+    // Filter by Class
+    document.getElementById('classFilter').addEventListener('change', function(e) {
+      const selectedClass = e.target.value;
+      const filteredData = selectedClass ? studentsData.filter(student => student.ชั้นเรียน === selectedClass) : studentsData;
+      populateNameSearch(studentsData, selectedClass);
+      renderTable(filteredData);
+      renderCharts(filteredData);
+    });
+
+    // Search by Name
+    document.getElementById('nameSearch').addEventListener('change', function(e) {
+      const selectedName = e.target.value;
+      if (selectedName) {
+        const selectedClass = document.getElementById('classFilter').value;
+        const filteredData = selectedClass ? studentsData.filter(student => student.ชั้นเรียน === selectedClass) : studentsData;
+        const student = filteredData.find(s => `${s.ชื่อ} ${s.สกุล}` === selectedName);
+        if (student) {
+          const index = currentFilteredData.indexOf(student);
+          if (index !== -1) {
+            openEditModal(index);
+          } else {
+            Swal.fire('ข้อผิดพลาด', 'ไม่พบนักเรียนในข้อมูลที่แสดง', 'error');
+          }
+        }
+      }
+    });
+
+    // Open Edit Modal
+    window.openEditModal = function(filteredIndex) {
+      const student = currentFilteredData[filteredIndex];
+      const globalIndex = studentsData.findIndex(s => 
+        s.ชื่อ === student.ชื่อ && s.สกุล === student.สกุล && s.ชั้นเรียน === student.ชั้นเรียน
+      );
+      if (globalIndex === -1) {
+        Swal.fire('ข้อผิดพลาด', 'ไม่พบข้อมูลนักเรียนในระบบ', 'error');
+        return;
+      }
+      document.getElementById('editRowIndex').value = globalIndex;
+      document.getElementById('editName').value = `${student.ชื่อ} ${student.สกุล}`;
+      document.getElementById('editClass').value = student.ชั้นเรียน || '-';
+      document.getElementById('editGoodDeeds').value = student.จำนวนครั้งทำความดี || 0;
+      document.getElementById('editPoints').value = student.แต้มสะสม || 0;
+      document.getElementById('editExtraPoints').value = student.แต้มพิเศษ || 0;
+      document.getElementById('editModal').style.display = 'flex';
+    };
+
+    // Close Modal
+    document.getElementById('closeModal').addEventListener('click', () => {
+      document.getElementById('editModal').style.display = 'none';
+    });
+
+    // Save Changes
+    document.getElementById('editForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const globalIndex = parseInt(document.getElementById('editRowIndex').value);
+      const student = studentsData[globalIndex];
+      const updatedData = {
+        UID: student.UID,
+        ชั้นเรียน: student.ชั้นเรียน,
+        เลขที่: student.เลขที่,
+        ID: student.ID,
+        หน้าชื่อ: student.หน้าชื่อ,
+        ชื่อ: student.ชื่อ,
+        สกุล: student.สกุล,
+        จำนวนครั้งทำความดี: parseInt(document.getElementById('editGoodDeeds').value),
+        แต้มสะสม: parseInt(document.getElementById('editPoints').value),
+        แต้มพิเศษ: parseInt(document.getElementById('editExtraPoints').value)
+      };
+
+      document.getElementById('preloader').classList.remove('hidden');
+      try {
+        const response = await fetch(sheetUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update', data: updatedData })
+        });
+        studentsData[globalIndex] = updatedData;
+        const selectedClass = document.getElementById('classFilter').value;
+        const filteredData = selectedClass ? studentsData.filter(student => student.ชั้นเรียน === selectedClass) : studentsData;
+        currentFilteredData = filteredData;
+        renderTable(filteredData);
+        renderCharts(filteredData);
+        document.getElementById('editModal').style.display = 'none';
+        Swal.fire('สำเร็จ', 'บันทึกคะแนนเรียบร้อยแล้ว', 'success');
+      } catch (error) {
+        console.error('Error updating data:', error);
+        Swal.fire('ข้อผิดพลาด', `ไม่สามารถบันทึกข้อมูลได้: ${error.message}`, 'error');
+      } finally {
+        document.getElementById('preloader').classList.add('hidden');
+      }
+    });
+
+    // Initialize on page load
+    window.onload = initializeLiff;
+  </script>
+</body>
+</html>
